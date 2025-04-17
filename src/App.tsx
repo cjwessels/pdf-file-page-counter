@@ -42,8 +42,7 @@ interface ProgressInfo {
 type SortField = 'name' | 'type' | 'pages' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
 
-const BATCH_SIZE = 3; // Reduced batch size for better memory management
-
+const BATCH_SIZE = Number(import.meta.env.VITE_BATCH_SIZE) || 3; // Use environment variable with fallback
 function App() {
   const [pageCounts, setPageCounts] = useState<PageCounts>({
     WIDE: 0,
