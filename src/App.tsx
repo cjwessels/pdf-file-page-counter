@@ -43,6 +43,7 @@ type SortField = 'name' | 'type' | 'pages' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
 
 const BATCH_SIZE = Number(import.meta.env.VITE_BATCH_SIZE) || 3; // Use environment variable with fallback
+
 function App() {
   const [pageCounts, setPageCounts] = useState<PageCounts>({
     WIDE: 0,
@@ -240,16 +241,22 @@ function App() {
       const canvas = document.getElementById('pdf-canvas') as HTMLCanvasElement;
       const context = canvas.getContext('2d');
 
-      if (context) {
-        const viewport = page.getViewport({ scale: 1.5 });
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+      if (!context) return;
 
-        await page.render({
-          canvasContext: context,
-          viewport: viewport,
-        }).promise;
-      }
+      const viewport = page.getViewport({ scale: 1.5 });
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      // Clear the canvas before rendering
+      context.clearRect(0, 0, canvas.width, canvas.height);
+
+      await page.render({
+        canvasContext: context,
+        viewport: viewport,
+      }).promise;
+
+      // Clean up page object
+      await page.cleanup();
     } catch (error) {
       console.error('Error rendering PDF page:', error);
     }
@@ -257,6 +264,11 @@ function App() {
 
   const openPdfViewer = async (file: FileInfo) => {
     try {
+      // Clean up existing PDF document if any
+      if (pdfDocument) {
+        await pdfDocument.destroy();
+      }
+
       setSelectedFile(file);
       const fileData = await file.fileHandle.getFile();
       const url = URL.createObjectURL(fileData);
@@ -276,18 +288,25 @@ function App() {
     }
   };
 
-  const closeModal = () => {
+  const closeModal = async () => {
     if (pdfUrl) {
       URL.revokeObjectURL(pdfUrl);
     }
     if (pdfDocument) {
-      pdfDocument.destroy();
+      await pdfDocument.destroy();
     }
     setSelectedFile(null);
     setPdfUrl(null);
     setPdfDocument(null);
     setCurrentPdfPage(1);
     setTotalPdfPages(0);
+
+    // Clear the canvas
+    const canvas = document.getElementById('pdf-canvas') as HTMLCanvasElement;
+    const context = canvas?.getContext('2d');
+    if (context) {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+    }
   };
 
   const changePage = async (newPage: number) => {
@@ -298,10 +317,6 @@ function App() {
   };
 
   React.useEffect(() => {
-    if (pdfDocument && currentPdfPage) {
-      renderPdfPage(currentPdfPage);
-    }
-
     return () => {
       // Cleanup when component unmounts
       if (pdfDocument) {
@@ -311,7 +326,7 @@ function App() {
         URL.revokeObjectURL(pdfUrl);
       }
     };
-  }, [pdfDocument, currentPdfPage]);
+  }, []);
 
   const filteredFiles = fileList.filter((file) => {
     const query = searchQuery.toLowerCase();
